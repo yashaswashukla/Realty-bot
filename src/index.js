@@ -54,7 +54,27 @@ app.post('/webhook', async (req, res) => {
   }
 });
 
-app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+app.get('/health', async (_req, res) => {
+  const start = Date.now();
+  try {
+    const { query } = require('./db');
+    await query('SELECT 1');
+    res.json({
+      status: 'ok',
+      db: 'connected',
+      uptime: Math.floor(process.uptime()),
+      responseTime: `${Date.now() - start}ms`,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    res.status(503).json({
+      status: 'degraded',
+      db: 'unreachable',
+      error: err.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`[Server] Running on port ${PORT}`);
