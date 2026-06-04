@@ -1,49 +1,41 @@
-require('dotenv').config();
-const axios = require('axios');
+const path = require('path');
 
-const BASE_URL = `https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`;
-
-const headers = () => ({
-  Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
-  'Content-Type': 'application/json',
-});
-
-async function sendText(to, body) {
+async function sendText(sock, jid, text) {
   try {
-    await axios.post(
-      BASE_URL,
-      {
-        messaging_product: 'whatsapp',
-        to,
-        type: 'text',
-        text: { body },
-      },
-      { headers: headers() }
-    );
+    await sock.sendMessage(jid, { text });
   } catch (err) {
-    const status = err.response?.status;
-    const data = err.response?.data;
-    console.error(`[WhatsApp] sendText failed (${status}):`, JSON.stringify(data));
+    console.error('[WhatsApp] sendText failed:', err.message);
     throw err;
   }
 }
 
-async function sendMedia(to, mediaType, link, caption = '') {
+async function sendImage(sock, jid, url, caption = '') {
   try {
-    const payload = {
-      messaging_product: 'whatsapp',
-      to,
-      type: mediaType,
-      [mediaType]: { link, caption },
-    };
-
-    await axios.post(BASE_URL, payload, { headers: headers() });
+    await sock.sendMessage(jid, { image: { url }, caption });
   } catch (err) {
-    const status = err.response?.status;
-    const data = err.response?.data;
-    console.error(`[WhatsApp] sendMedia failed (${status}):`, JSON.stringify(data));
+    console.error('[WhatsApp] sendImage failed:', err.message);
     throw err;
   }
 }
 
-module.exports = { sendText, sendMedia };
+async function sendVideo(sock, jid, url, caption = '') {
+  try {
+    await sock.sendMessage(jid, { video: { url }, caption });
+  } catch (err) {
+    console.error('[WhatsApp] sendVideo failed:', err.message);
+    throw err;
+  }
+}
+
+async function sendDocument(sock, jid, url, fileName = 'brochure.pdf') {
+  try {
+    const ext = path.extname(fileName).toLowerCase();
+    const mimetype = ext === '.pdf' ? 'application/pdf' : 'application/octet-stream';
+    await sock.sendMessage(jid, { document: { url }, mimetype, fileName });
+  } catch (err) {
+    console.error('[WhatsApp] sendDocument failed:', err.message);
+    throw err;
+  }
+}
+
+module.exports = { sendText, sendImage, sendVideo, sendDocument };

@@ -15,12 +15,12 @@ async function query(text, params = []) {
   }
 }
 
-async function getCities() {
-  return query('SELECT * FROM cities ORDER BY id');
+async function getZones() {
+  return query('SELECT * FROM zones ORDER BY id');
 }
 
-async function getProjectsByCity(cityId) {
-  return query('SELECT * FROM projects WHERE city_id = $1 ORDER BY id', [cityId]);
+async function getProjectsByZone(zoneId) {
+  return query('SELECT * FROM projects WHERE zone_id = $1 ORDER BY id', [zoneId]);
 }
 
 async function getProjectById(projectId) {
@@ -51,4 +51,4 @@ async function runSeed() {
   console.log('[DB] Seed complete.');
 }
 
-module.exports = { query, getCities, getProjectsByCity, getProjectById, getMediaByProject, runSeed };
+module.exports = { query, getZones, getProjectsByZone, getProjectById, getMediaByProject, runSeed };

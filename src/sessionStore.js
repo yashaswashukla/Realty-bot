@@ -3,9 +3,9 @@ const sessions = new Map();
 function getDefaultState() {
   return {
     step: 'start',
-    selectedCity: null,
+    selectedZone: null,
     selectedProject: null,
-    cityProjects: [],
+    zoneProjects: [],
     pendingMediaType: null,
     userName: null,
     userNumber: null,
