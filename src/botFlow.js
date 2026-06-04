@@ -123,8 +123,21 @@ async function handleActionSelection(from, input, session) {
     }
 
     for (const b of brochures) {
-      const url = b.cloudinary_url || b.file_path;
+      let url = b.cloudinary_url;
       const fileName = path.basename(b.file_path);
+
+      // Upload to Cloudinary if no public URL exists yet
+      if (!url) {
+        const localPath = path.join(__dirname, '..', b.file_path);
+        try {
+          url = await uploadMedia(localPath);
+        } catch (err) {
+          console.error('[BotFlow] Brochure upload error:', err.message);
+          await sendText(from, 'Failed to send brochure. Please try again.');
+          continue;
+        }
+      }
+
       try {
         await sendDocument(from, url, fileName);
       } catch (err) {
