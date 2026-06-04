@@ -1,56 +1,81 @@
 require('dotenv').config();
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
-const { Boom } = require('@hapi/boom');
-const pino = require('pino');
+const express = require('express');
 const { handleMessage } = require('./botFlow');
 
-async function connectToWhatsApp() {
-  const { state, saveCreds } = await useMultiFileAuthState('./auth');
+const app = express();
+app.use(express.json());
 
-  const sock = makeWASocket({
-    auth: state,
-    printQRInTerminal: true,
-    logger: pino({ level: 'silent' }),
-  });
+const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
+const PORT = process.env.PORT || 3000;
 
-  sock.ev.on('creds.update', saveCreds);
+// Meta webhook verification
+app.get('/webhook', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
 
-  sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
-    if (connection === 'close') {
-      const shouldReconnect =
-        new Boom(lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-      console.log('[Connection] Closed. Reconnecting:', shouldReconnect);
-      if (shouldReconnect) connectToWhatsApp();
-    } else if (connection === 'open') {
-      console.log('[Connection] WhatsApp connected successfully');
-    }
-  });
+  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    console.log('[Webhook] Verified successfully.');
+    return res.status(200).send(challenge);
+  }
 
-  sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
+  console.warn('[Webhook] Verification failed. Token mismatch.');
+  res.sendStatus(403);
+});
 
-    const msg = messages[0];
-    if (!msg || msg.key.fromMe) return;
+// Incoming message handler
+app.post('/webhook', async (req, res) => {
+  // Acknowledge immediately so Meta doesn't retry
+  res.sendStatus(200);
 
-    const jid = msg.key.remoteJid;
-    if (!jid || jid.endsWith('@g.us')) return;
+  const body = req.body;
 
-    const text = (
-      msg.message?.conversation ||
-      msg.message?.extendedTextMessage?.text ||
-      ''
-    ).trim();
+  if (body.object !== 'whatsapp_business_account') return;
 
-    if (!text) return;
+  const entry = body.entry?.[0];
+  const change = entry?.changes?.[0];
+  const value = change?.value;
+  const messages = value?.messages;
 
-    console.log(`[Message] From ${jid}: ${text}`);
+  if (!messages || messages.length === 0) return;
 
-    try {
-      await handleMessage(sock, jid, text);
-    } catch (err) {
-      console.error('[Message] Unhandled error:', err.message);
-    }
-  });
-}
+  const message = messages[0];
+  const from = message.from;
+  const text = message.text?.body;
 
-connectToWhatsApp();
+  if (!from || !text) return;
+
+  console.log(`[Webhook] Message from ${from}: ${text}`);
+
+  try {
+    await handleMessage(from, text);
+  } catch (err) {
+    console.error('[Webhook] Unhandled error in handleMessage:', err.message);
+  }
+});
+
+app.get('/health', async (_req, res) => {
+  const start = Date.now();
+  try {
+    const { query } = require('./db');
+    await query('SELECT 1');
+    res.json({
+      status: 'ok',
+      db: 'connected',
+      uptime: Math.floor(process.uptime()),
+      responseTime: `${Date.now() - start}ms`,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    res.status(503).json({
+      status: 'degraded',
+      db: 'unreachable',
+      error: err.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`[Server] Running on port ${PORT}`);
+});
